@@ -2,10 +2,10 @@ import hashlib
 import json
 from time import time
 from uuid import uuid4
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from pydantic import BaseModel
 from urllib.parse import urlparse
-import requests 
+import requests
 
 app = FastAPI()
 
@@ -13,7 +13,6 @@ class Blockchain:
     def __init__(self):
         self.chain = []
         self.current_transactions = []
-        # Create the genesis block
         self.new_block(previous_hash='1', proof=100)
         self.nodes = set()
 
@@ -25,7 +24,6 @@ class Blockchain:
             'proof': proof,
             'previous_hash': previous_hash or self.hash(self.chain[-1]),
         }
-        # Reset the current list of transactions
         self.current_transactions = []
         self.chain.append(block)
         return block
@@ -37,7 +35,7 @@ class Blockchain:
             'amount': amount,
         })
         return self.last_block['index'] + 1
-    
+
     def register_node(self, address):
         parsed_url = urlparse(address)
         self.nodes.add(parsed_url.netloc)
@@ -46,40 +44,34 @@ class Blockchain:
         last_block = chain[0]
         current_index = 1
 
-        while current_index<len(chain):
+        while current_index < len(chain):
             block = chain[current_index]
-            print(f'{last_block}')
-            print(f'{block}')
-            print("\n-----------\n")
-
-            if block["previous_hash"] != self.hash(last_block):
+            if block['previous_hash'] != self.hash(last_block):
                 return False
-            if not self.valid_proof(last_block['proof'] ,block['proof']):
+            if not self.valid_proof(last_block['proof'], block['proof']):
                 return False
             last_block = block
             current_index += 1
         return True
-    
+
     def resolve_conflicts(self):
         neighbours = self.nodes
         new_chain = None
         max_length = len(self.chain)
 
         for node in neighbours:
-            response = requests.get(f'https://{node}/chain')
-
+            response = requests.get(f'http://{node}/chain')
             if response.status_code == 200:
                 length = response.json()['length']
                 chain = response.json()['chain']
-
-                if length>max_length and self.valid_chain(chain):
+                if length > max_length and self.valid_chain(chain):
                     max_length = length
                     new_chain = chain
 
         if new_chain:
             self.chain = new_chain
             return True
-
+        return False
 
     @staticmethod
     def hash(block):
@@ -102,9 +94,7 @@ class Blockchain:
         guess_hash = hashlib.sha256(guess).hexdigest()
         return guess_hash[:4] == "0000"
 
-# Instantiate the Blockchain
 blockchain = Blockchain()
-# Generate a globally unique address for this node
 node_identifier = str(uuid4()).replace('-', '')
 
 class Transaction(BaseModel):
@@ -117,17 +107,9 @@ async def mine():
     last_block = blockchain.last_block
     last_proof = last_block['proof']
     proof = blockchain.proof_of_work(last_proof)
-
-    # Reward for mining a new block
-    blockchain.new_transaction(
-        sender="0",
-        recipient=node_identifier,
-        amount=1,
-    )
-
+    blockchain.new_transaction(sender="0", recipient=node_identifier, amount=1)
     previous_hash = blockchain.hash(last_block)
     block = blockchain.new_block(proof, previous_hash)
-
     response = {
         'message': "New Block Forged",
         'index': block['index'],
@@ -153,10 +135,14 @@ async def full_chain():
 
 @app.post('/nodes/register')
 async def register_nodes(request: Request):
-    values = await request.json()
+    try:
+        values = await request.json()
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON format")
+
     nodes = values.get('nodes')
     if nodes is None:
-        return "Error: Please supply a valid list of nodes", 400
+        raise HTTPException(status_code=400, detail="Please supply a valid list of nodes")
 
     for node in nodes:
         blockchain.register_node(node)
@@ -165,10 +151,10 @@ async def register_nodes(request: Request):
         'message': 'New nodes have been added',
         'total_nodes': list(blockchain.nodes),
     }
-    return response, 201
+    return response
 
 @app.get('/nodes/resolve')
-async def consensus(request: Request):
+async def consensus():
     replaced = blockchain.resolve_conflicts()
     if replaced:
         response = {
