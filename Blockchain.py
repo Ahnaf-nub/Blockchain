@@ -2,12 +2,17 @@ import hashlib
 import json
 from time import time
 from uuid import uuid4
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, Form
 from pydantic import BaseModel
 from urllib.parse import urlparse
 import requests
+from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse
 
 app = FastAPI()
+app.mount("/static", StaticFiles(directory="static"), name="static")
+templates = Jinja2Templates(directory="templates")
 
 class Blockchain:
     def __init__(self):
@@ -102,38 +107,46 @@ class Transaction(BaseModel):
     recipient: str
     amount: int
 
-@app.get('/mine')
-async def mine():
+@app.get("/", response_class=HTMLResponse)
+async def read_index(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
+
+@app.get('/mine', response_class=HTMLResponse)
+async def mine(request: Request):
     last_block = blockchain.last_block
     last_proof = last_block['proof']
     proof = blockchain.proof_of_work(last_proof)
     blockchain.new_transaction(sender="0", recipient=node_identifier, amount=1)
     previous_hash = blockchain.hash(last_block)
     block = blockchain.new_block(proof, previous_hash)
-    response = {
-        'message': "New Block Forged",
-        'index': block['index'],
-        'transactions': block['transactions'],
-        'proof': block['proof'],
-        'previous_hash': block['previous_hash'],
-    }
-    return response
+    
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "mined_block": block
+    })
 
-@app.post('/transactions/new')
-async def new_transaction(transaction: Transaction):
-    index = blockchain.new_transaction(transaction.sender, transaction.recipient, transaction.amount)
-    response = {'message': f'Transaction will be added to Block {index}'}
-    return response
+@app.post('/transactions/new', response_class=HTMLResponse)
+async def new_transaction(request: Request, sender: str = Form(...), recipient: str = Form(...), amount: int = Form(...)):
+    index = blockchain.new_transaction(sender, recipient, amount)
+    transaction_message = f'Transaction will be added to Block {index}'
+    
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "transaction_message": transaction_message
+    })
 
-@app.get('/chain')
-async def full_chain():
+@app.get('/chain', response_class=HTMLResponse)
+async def full_chain(request: Request):
     response = {
         'chain': blockchain.chain,
         'length': len(blockchain.chain),
     }
-    return response
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "chain": json.dumps(response, indent=2)
+    })
 
-@app.post('/nodes/register')
+@app.post('/nodes/register', response_class=HTMLResponse)
 async def register_nodes(request: Request):
     try:
         values = await request.json()
@@ -151,10 +164,14 @@ async def register_nodes(request: Request):
         'message': 'New nodes have been added',
         'total_nodes': list(blockchain.nodes),
     }
-    return response
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "node_message": response['message'],
+        "total_nodes": response['total_nodes']
+    })
 
-@app.get('/nodes/resolve')
-async def consensus():
+@app.get('/nodes/resolve', response_class=HTMLResponse)
+async def consensus(request: Request):
     replaced = blockchain.resolve_conflicts()
     if replaced:
         response = {
@@ -166,7 +183,11 @@ async def consensus():
             'message': 'Our chain is authoritative',
             'chain': blockchain.chain
         }
-    return response
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "consensus_message": response['message'],
+        "chain": json.dumps(response.get('new_chain', response['chain']), indent=2)
+    })
 
 if __name__ == '__main__':
     import uvicorn

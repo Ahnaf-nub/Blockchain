@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Blockchain</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Simple Blockchain</h1>
+        
+        <h2>Mine a New Block</h2>
+        <form action="/mine" method="get">
+            <button type="submit">Mine Block</button>
+        </form>
+        {% if mined_block %}
+        <div class="message">
+            <h3>New Block Forged:</h3>
+            <pre>{{ mined_block }}</pre>
+        </div>
+        {% endif %}
+
+        <h2>Create a New Transaction</h2>
+        <form action="/transactions/new" method="post">
+            <label for="sender">Sender:</label>
+            <input type="text" id="sender" name="sender" required>
+
+            <label for="recipient">Recipient:</label>
+            <input type="text" id="recipient" name="recipient" required>
+
+            <label for="amount">Amount:</label>
+            <input type="number" id="amount" name="amount" required>
+
+            <button type="submit">Submit Transaction</button>
+        </form>
+        {% if transaction_message %}
+        <div class="message">
+            <h3>{{ transaction_message }}</h3>
+        </div>
+        {% endif %}
+
+        <h2>Blockchain</h2>
+        <form action="/chain" method="get">
+            <button type="submit">View Full Chain</button>
+        </form>
+        {% if chain %}
+        <pre>{{ chain }}</pre>
+        {% endif %}
+
+        <h2>Register Node</h2>
+        <form action="/nodes/register" method="post">
+            <label for="node">Node Address (e.g., http://127.0.0.1:5001):</label>
+            <input type="text" id="node" name="node" >
+            <button type="submit">Register Node</button>
+        </form>
+        {% if node_message %}
+        <div class="message">
+            <h3>{{ node_message }}</h3>
+            <p>Current Nodes: {{ total_nodes }}</p>
+        </div>
+        {% endif %}
+
+        <h2>Resolve Conflicts</h2>
+        <form action="/nodes/resolve" method="get">
+            <button type="submit">Resolve Conflicts</button>
+        </form>
+        {% if consensus_message %}
+        <div class="message">
+            <h3>{{ consensus_message }}</h3>
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>
