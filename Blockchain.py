@@ -2,9 +2,8 @@ import hashlib
 import json
 from time import time
 from uuid import uuid4
-from fastapi import FastAPI, Request, HTTPException, Form
+from fastapi import FastAPI, Request, Form
 from pydantic import BaseModel
-from urllib.parse import urlparse
 import requests
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -40,10 +39,6 @@ class Blockchain:
             'amount': amount,
         })
         return self.last_block['index'] + 1
-
-    def register_node(self, address):
-        parsed_url = urlparse(address)
-        self.nodes.add(parsed_url.netloc)
 
     def valid_chain(self, chain):
         last_block = chain[0]
@@ -146,30 +141,6 @@ async def full_chain(request: Request):
         "chain": json.dumps(response, indent=2)
     })
 
-@app.post('/nodes/register', response_class=HTMLResponse)
-async def register_nodes(request: Request):
-    try:
-        values = await request.json()
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Invalid JSON format")
-
-    nodes = values.get('nodes')
-    if nodes is None:
-        raise HTTPException(status_code=400, detail="Please supply a valid list of nodes")
-
-    for node in nodes:
-        blockchain.register_node(node)
-
-    response = {
-        'message': 'New nodes have been added',
-        'total_nodes': list(blockchain.nodes),
-    }
-    return templates.TemplateResponse("index.html", {
-        "request": request,
-        "node_message": response['message'],
-        "total_nodes": response['total_nodes']
-    })
-
 @app.get('/nodes/resolve', response_class=HTMLResponse)
 async def consensus(request: Request):
     replaced = blockchain.resolve_conflicts()
@@ -191,4 +162,4 @@ async def consensus(request: Request):
 
 if __name__ == '__main__':
     import uvicorn
-    uvicorn.run(app, host='127.0.0.1', port=5000)
+    uvicorn.run(app, host='127.0.0.1', port=8000)
